@@ -172,6 +172,43 @@ input:focus, select:focus {
     background: var(--bg-tertiary);
 }
 
+.suggestions-dropdown {
+    position: absolute;
+    background: var(--bg-secondary);
+    border: 2px solid var(--primary-color);
+    border-radius: var(--radius-md);
+    max-height: 115px;
+    overflow-y: auto;
+    box-shadow: var(--shadow-lg);
+}
+
+.suggestion-item {
+    padding: 0.875rem 1rem;
+    cursor: pointer;
+    transition: var(--transition-base);
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--bg-tertiary);
+}
+
+.suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.suggestion-item:hover {
+    background: var(--bg-tertiary);
+    color: var(--primary-color);
+}
+
+.suggestions-dropdown::-webkit-scrollbar {
+    width: 0;
+    background: transparent;
+}
+
+.suggestions-dropdown {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
 .form-row {
     display: flex;
     gap: 1.5rem;
@@ -266,6 +303,35 @@ input:focus, select:focus {
     overflow: hidden;
     transition: var(--transition-base);
     animation: slideIn 0.3s ease-out;
+}
+
+.monthly-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    margin-bottom: 1.5rem;
+}
+
+.monthly-header h2 {
+    margin-bottom: 0;
+}
+
+.monthly-content {
+    overflow: hidden;
+    padding-top: 1rem;
+    border-top: 1px solid var(--bg-tertiary);
+    transition: all 0.3s ease;
+}
+
+.monthly-expenses-section.collapsed .monthly-content {
+    max-height: 0;
+    padding: 0;
+    border: none;
+}
+
+.monthly-expenses-section.collapsed .monthly-header {
+    margin-bottom: 0;
 }
 
 .month-section:hover {
@@ -369,6 +435,10 @@ input:focus, select:focus {
     transform: translateX(4px);
 }
 
+.expense-item.uncategorized::before {
+    background: linear-gradient(135deg, var(--danger-color), var(--secondary-color));
+}
+
 .expense-meta {
     font-weight: 600;
     color: var(--text-primary);
@@ -457,6 +527,15 @@ input:focus, select:focus {
     text-align: left;
 }
 
+.budget-table .total-row {
+    background: var(--bg-tertiary);
+    border-block: 2px solid var(--border-hover);
+}
+
+.budget-table .total-row td {
+    padding-block: 1rem;
+}
+
 .empty-state {
     text-align: center;
     padding: 3rem 2rem;
@@ -536,7 +615,7 @@ input:focus, select:focus {
 }
 
 section.budget-section {
-    margin-bottom: 0;
+    margin-bottom: 1rem;
 }
 
 .budget-content {

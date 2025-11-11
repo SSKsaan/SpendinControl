@@ -10,10 +10,12 @@ class ExpenseTracker {
   }
 
   init() {
-    document.getElementById('expenseDate').value = new Date().toISOString().split('T')[0];
+    this.resetForm();
     document.getElementById('expenseForm').onsubmit = e => this.handleExpenseSubmit(e);
     document.getElementById('cancelEdit').onclick = () => this.cancelEdit();
     document.getElementById('addBudgetBtn').onclick = () => this.addOrUpdateBudget();
+    document.getElementById('expenseCategory').oninput = e => this.filterCategories(e);
+    document.getElementById('expenseCategory').onblur = () => categorySuggestions.classList.add('hidden');
     document.getElementById('exportBtn').onclick = () => this.exportCSV();
     document.getElementById('importFile').onchange = e => this.importCSV(e);
     window.addEventListener('online', () => this.setOnlineStatus());
@@ -35,8 +37,13 @@ class ExpenseTracker {
     const category = expenseCategory.value.trim();
     const date = expenseDate.value;
     if (!name || !amount || !date) return alert('Fill all fields');
+    const expenseId = this.editingExpenseId || Date.now();
     const data = { id: this.editingExpenseId || Date.now(), name, amount, category, date, month: date.slice(0, 7) };
-    this.expenses = this.editingExpenseId ? this.expenses.map(e => e.id == data.id ? data : e) : [...this.expenses, data];
+    if (this.editingExpenseId) {
+      const index = this.expenses.findIndex(e => e.id === data.id);
+      this.expenses[index] = data;
+      this.scrollToExpenseId = expenseId;
+    } else { this.expenses.push(data); }
     this.editingExpenseId = null;
     this.resetForm();
     this.save();
@@ -79,8 +86,13 @@ class ExpenseTracker {
     const category = budgetCategory.value.trim();
     const amount = parseFloat(budgetAmount.value);
     if (!category || !amount) return alert('Enter valid category and amount');
+    const budgetId = this.editingBudgetId || Date.now();
     const data = { id: this.editingBudgetId || Date.now(), category, amount };
-    this.budgets = this.editingBudgetId ? this.budgets.map(b => b.id == data.id ? data : b) : [...this.budgets, data];
+    if (this.editingBudgetId) {
+      const index = this.budgets.findIndex(b => b.id === data.id);
+      this.budgets[index] = data;
+      this.scrollToBudgetId = budgetId;
+    } else { this.budgets.push(data); }
     this.editingBudgetId = null;
     budgetCategory.value = '';
     budgetAmount.value = '';
@@ -96,7 +108,7 @@ class ExpenseTracker {
     budgetAmount.value = b.amount;
     this.editingBudgetId = id;
     addBudgetBtn.textContent = 'Update Budget';
-    document.querySelector('.budget-section').scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('budgetCategory').scrollIntoView({ behavior: 'smooth' });
   }
 
   deleteBudget(id) {
@@ -106,6 +118,9 @@ class ExpenseTracker {
     this.render();
   }
 
+  toggleExpensesSection() {
+    document.querySelector('.monthly-expenses-section').classList.toggle('collapsed');
+  }
   toggleBudgetSection() {
     document.querySelector('.budget-section').classList.toggle('collapsed');
   }
@@ -189,11 +204,20 @@ class ExpenseTracker {
     });
     const months = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
     container.innerHTML = months.map(month => {
-      const items = grouped[month];
+      const items = grouped[month].sort((a, b) => {
+        if (b.date !== a.date) return b.date.localeCompare(a.date);
+        return b.id - a.id;
+      });
       const total = items.reduce((s, e) => s + parseFloat(e.amount), 0);
       const mName = new Date(month + '-01').toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
       const show = this.collapsedMonths.has(month);
       const showTable = this.collapsedComparisons.has(month);
+      
+      const budgetCats = this.budgets.map(b => b.category);
+      const uncategorizedIds = new Set(
+        items.filter(e => !e.category || !budgetCats.includes(e.category)).map(e => e.id)
+      );
+      
       return `
         <div class="month-section ${!show ? 'collapsed' : ''}">
           <div class="month-header" onclick="tracker.toggleMonth('${month}')">
@@ -214,7 +238,7 @@ class ExpenseTracker {
               </div>
             </div>
             ${items.map(e => `
-              <div class="expense-item">
+              <div class="expense-item ${uncategorizedIds.has(e.id) ? 'uncategorized' : ''}" id="expense-${e.id}">
                 <div class="expense-details">
                   <div class="expense-meta">${e.name} <span class="expense-date">| ${new Date(e.date).toLocaleDateString()}</span></div>
                   ${e.category ? `<span class="expense-category">${e.category}</span>` : ''}
@@ -231,8 +255,14 @@ class ExpenseTracker {
       `;
     }).join('');
 
+    if (this.scrollToExpenseId) {
+      const expenseItem = document.getElementById('expense-' + this.scrollToExpenseId);
+      if (expenseItem) expenseItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      this.scrollToExpenseId = null;
+    }
+
     budgetList.innerHTML = this.budgets.length ? this.budgets.map(b => `
-      <div class="budget-item-display">
+      <div class="budget-item-display" id="budget-${b.id}">
         <div><strong>${b.category}</strong><br>${this.format(b.amount)}</div>
         <div class="expense-actions">
           <button class="btn btn-success btn-small" onclick="tracker.editBudget(${b.id})">✏️ Edit </button>
@@ -240,6 +270,12 @@ class ExpenseTracker {
         </div>
       </div>
     `).join('') : '<div class="empty-state">No budgets set</div>';
+
+    if (this.scrollToBudgetId) {
+      const budgetItem = document.getElementById('budget-' + this.scrollToBudgetId);
+      if (budgetItem) budgetItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      this.scrollToBudgetId = null;
+    }
   }
 
   renderComparison(month) {
@@ -269,7 +305,19 @@ class ExpenseTracker {
       </tr>`;
     }).join('');
 
-    const defaultRow = uncategorizedTotal > 0 ? `<tr>
+    const totalBudget = this.budgets.reduce((sum, b) => sum + b.amount, 0);
+    const totalSpent = Object.values(totals).reduce((sum, amt) => sum + amt, 0);
+    const totalRemain = totalBudget - totalSpent;
+    const totalCls = totalSpent > totalBudget ? 'over-budget' : 'under-budget';
+
+    const totalRow = `<tr class="total-row">
+      <td class="category"><strong>TOTAL</strong></td>
+      <td><strong>${this.format(totalBudget)}</strong></td>
+      <td><strong>${this.format(totalSpent)}</strong></td>
+      <td class="${totalCls}"><strong>${this.format(totalRemain)}</strong></td>
+    </tr>`;
+
+    const extraRow = uncategorizedTotal > 0 ? `<tr class="others-row">
       <td class="category">Others</td>
       <td>-</td>
       <td>${this.format(uncategorizedTotal)}</td>
@@ -278,8 +326,33 @@ class ExpenseTracker {
 
     return `<table class="budget-table">
       <thead><tr><th class="category">Category</th><th>Budget </th><th>Spent </th><th>Current</th></tr></thead>
-      <tbody>${rows}${defaultRow}</tbody>
+      <tbody>${rows}${totalRow}${extraRow}</tbody>
     </table>`;
+  }
+
+  filterCategories(e) {
+    const input = e.target.value.toLowerCase();
+    const suggestions = document.getElementById('categorySuggestions');
+    if (!suggestions) return;
+    
+    const filtered = this.budgets.map(b => b.category).filter(cat => cat.toLowerCase().includes(input));
+    
+    if (!filtered.length || (filtered.length === 1 && filtered[0].toLowerCase() === input)) {
+      suggestions.classList.add('hidden');
+      return;
+    }
+    
+    const inputEl = e.target;
+    const inputRect = inputEl.getBoundingClientRect();
+    const formRect = inputEl.closest('section').getBoundingClientRect();
+    
+    suggestions.style.top = `${inputRect.bottom - formRect.top + 4}px`;
+    suggestions.style.left = `${inputRect.left - formRect.left}px`;
+    suggestions.style.width = `${inputRect.width}px`;
+    suggestions.innerHTML = filtered.map(cat => 
+      `<div class="suggestion-item" onclick="expenseCategory.value='${cat}';categorySuggestions.classList.add('hidden')">${cat}</div>`
+    ).join('');
+    suggestions.classList.remove('hidden');
   }
 }
 
